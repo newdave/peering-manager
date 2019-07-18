@@ -1,57 +1,42 @@
-"""peering_manager URL Configuration
-
-The `urlpatterns` list routes URLs to views. For more information please see:
-    https://docs.djangoproject.com/en/1.11/topics/http/urls/
-Examples:
-Function views
-    1. Add an import:  from my_app import views
-    2. Add a URL to urlpatterns:  url(r'^$', views.home, name='home')
-Class-based views
-    1. Add an import:  from other_app.views import Home
-    2. Add a URL to urlpatterns:  url(r'^$', Home.as_view(), name='home')
-Including another URLconf
-    1. Import the include() function: from django.conf.urls import url, include
-    2. Add a URL to urlpatterns:  url(r'^blog/', include('blog.urls'))
-"""
-from __future__ import unicode_literals
-
 from django.conf import settings
-from django.conf.urls import include, url
-from django.contrib import admin
+from django.conf.urls import include, re_path
 
 from . import views
+from .admin import admin_site
+from users.views import LoginView, LogoutView
 
 
 handler500 = views.handle_500
 
 __patterns = [
     # Include the peering app
-    url(r'', include('peering.urls')),
-
+    re_path(r"", include("peering.urls")),
     # Include the peeringdb app
-    url(r'', include('peeringdb.urls')),
-
+    re_path(r"", include("peeringdb.urls")),
+    # Include the users app
+    re_path(r"^user/", include("users.urls")),
+    # Include the utils app
+    re_path(r"", include("utils.urls")),
     # Users login/logout
-    url(r'^login/$', views.LoginView.as_view(), name='login'),
-    url(r'^logout/$', views.LogoutView.as_view(), name='logout'),
-
-    # User profile, password, activity
-    url(r'^profile/$', views.ProfileView.as_view(), name='user_profile'),
-    url(r'^password/$', views.ChangePasswordView.as_view(),
-        name='user_change_password'),
-    url(r'^activity/$', views.RecentActivityView.as_view(), name='user_activity'),
-
+    re_path(r"^login/$", LoginView.as_view(), name="login"),
+    re_path(r"^logout/$", LogoutView.as_view(), name="logout"),
     # Home
-    url(r'^$', views.Home.as_view(), name='home'),
-
+    re_path(r"^$", views.Home.as_view(), name="home"),
     # Admin
-    url(r'^admin/', admin.site.urls),
-
+    re_path(r"^admin/", admin_site.urls),
     # Error triggering
-    url(r'^error500/$', views.trigger_500),
+    re_path(r"^error500/$", views.trigger_500),
+    # API
+    re_path(r"^api/$", views.APIRootView.as_view(), name="api-root"),
+    re_path(r"^api/peering/", include("peering.api.urls")),
+    re_path(r"^api/peeringdb/", include("peeringdb.api.urls")),
 ]
+
+# Add debug_toolbar in debug mode
+if settings.DEBUG:
+    import debug_toolbar
+
+    __patterns += [re_path(r"^__debug__/", include(debug_toolbar.urls))]
 
 # Prepend BASE_PATH
-urlpatterns = [
-    url(r'^{}'.format(settings.BASE_PATH), include(__patterns))
-]
+urlpatterns = [re_path(r"^{}".format(settings.BASE_PATH), include(__patterns))]

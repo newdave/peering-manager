@@ -1,0 +1,75 @@
+{% extends '_base.html' %}
+{% load helpers %}
+{% block actions %}
+{% if perms.peering.change_template %}
+<a href="{% url 'peering:template_edit' pk=template.pk %}" class="btn btn-warning">
+  <i class="fas fa-edit"></i> Edit
+</a>
+{% endif %}
+{% if perms.peering.delete_template %}
+<a href="{% url 'peering:template_delete' pk=template.pk %}" class="btn btn-danger">
+  <i class="fas fa-trash"></i> Delete
+</a>
+{% endif %}
+{% endblock %}
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{% url 'peering:template_list' %}">Templates</a></li>
+<li class="breadcrumb-item active" aria-current="page">{% block title %}{{ template }}{% endblock %}</li>
+{% endblock %}
+{% block content %}
+      <div class="row">
+        <div class="col-md-6">
+          <div class="card mb-2">
+            <div class="card-header">
+              <strong>Template Details</strong>
+            </div>
+            <table class="card-body table table-hover attr-table mb-0">
+              <tr>
+                <td>Name</td>
+                <td>{{ template.name }}</td>
+              </tr>
+              <tr>
+                <td>Type</td>
+                <td>{{ template.get_type_display }}</td>
+              </tr>
+              <tr>
+                <td>Last update</td>
+                <td>{{ template.updated }}</td>
+              </tr>
+              <tr>
+                <td>Utilization</td>
+                <td>Used by {{ routers|length }} router{{ routers|length|pluralize }}</td>
+              </tr>
+            </table>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="card mb-2">
+            <div class="card-header">
+              <strong>Comments</strong>
+            </div>
+            <div class="card-body">
+              {% if template.comment %}
+              {{ template.comment|markdown }}
+              {% else %}
+              <span class="text-muted">None</span>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="row">
+        <div class="col">
+          <div class="card">
+            <div class="card-header">
+              <strong>Template</strong>
+            </div>
+            <pre class="pre-scrollable">{{ template.template }}</pre>
+            <div class="card-footer">
+              <i class="fa fa-info-circle"></i>
+              <a href="https://github.com/respawner/peering-manager/wiki/configuration_template" target="_blank">Jinja2 template</a> syntax
+            </div>
+          </div>
+        </div>
+      </div>
+{% endblock %}

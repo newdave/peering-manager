@@ -37,10 +37,11 @@ network to an IX. It is composed of the following fields:
     editing the IX object you can use your IX IPv6 or IPv4 address with these
     given URL and note the `id` field's value (it must be a number).
 
-    ```
+    ```no-highlight
     https://peeringdb.com/api/netixlan?ipaddr4=${YOUR_IPV4_ADDRESS}
     https://peeringdb.com/api/netixlan?ipaddr6=${YOUR_IPV6_ADDRESS}
     ```
+
   * **comments**, it is an optional field that can be used to take some notes
     about the object. It supports the
     [GitHub Markdown](https://github.com/adam-p/markdown-here/wiki/Markdown-Cheatsheet)

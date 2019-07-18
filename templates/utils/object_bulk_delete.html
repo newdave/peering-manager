@@ -1,8 +1,6 @@
 {% extends '_base.html' %}
 {% load helpers %}
-
-{% block title %}Delete {{ table.rows|length }} {{ object_type_plural|title }}?{% endblock %}
-
+{% block breadcrumb %}<li class="breadcrumb-item active" aria-current="page">{% block title %}Delete {{ table.rows|length }} {{ object_type_plural|title_with_uppers }}?{% endblock %}</li>{% endblock %}
 {% block content %}
   <div class="row justify-content-md-center">
     <div class="col-md-8">
@@ -12,7 +10,7 @@
           <p class="card-text"><strong>Warning:</strong> The following operation will delete {{ table.rows|length }} {{ object_type_plural }}. Please carefully review the {{ object_type_plural }} to be deleted and confirm below.</p>
           {% block message_extra %}{% endblock %}
         </div>
-        {% include 'utils/table.html' %}
+        {% include 'utils/responsive_table.html' %}
         <div class="card-body">
           <form method="post" class="form">
             {% csrf_token %}

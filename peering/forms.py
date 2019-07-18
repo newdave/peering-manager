@@ -1,114 +1,219 @@
-from __future__ import unicode_literals
-
 from django import forms
+from django.db.models import Q
+from django.conf import settings
 
-from .constants import COMMUNITY_TYPE_CHOICES, PLATFORM_CHOICES
-from .models import (AutonomousSystem, Community, ConfigurationTemplate,
-                     InternetExchange, PeeringSession, Router)
-from peeringdb.models import PeerRecord
-from utils.forms import (BootstrapMixin, CSVChoiceField, FilterChoiceField,
-                         PasswordField, SlugField, YesNoField)
+from .constants import (
+    BGP_RELATIONSHIP_CHOICES,
+    COMMUNITY_TYPE_CHOICES,
+    IP_FAMILY_CHOICES,
+    PLATFORM_CHOICES,
+    ROUTING_POLICY_TYPE_CHOICES,
+    ROUTING_POLICY_TYPE_EXPORT,
+    ROUTING_POLICY_TYPE_IMPORT,
+    ROUTING_POLICY_TYPE_IMPORT_EXPORT,
+    TEMPLATE_TYPE_CHOICES,
+)
+from .models import (
+    AutonomousSystem,
+    BGPGroup,
+    Community,
+    DirectPeeringSession,
+    InternetExchange,
+    InternetExchangePeeringSession,
+    Router,
+    RoutingPolicy,
+    Template,
+)
+from netbox.api import NetBox
+from utils.forms import (
+    APISelect,
+    APISelectMultiple,
+    BulkEditForm,
+    BootstrapMixin,
+    CustomNullBooleanSelect,
+    FilterChoiceField,
+    PasswordField,
+    SlugField,
+    SmallTextarea,
+    StaticSelect,
+    StaticSelectMultiple,
+    TextareaField,
+    add_blank_choice,
+)
 
 
-class CommentField(forms.CharField):
+class CommentField(TextareaField):
     """
-    A textarea with support for GitHub-Flavored Markdown. Exists mostly just to
-    add a standard help_text.
+    A textarea with support for GitHub-Flavored Markdown. Note that it does not
+    actually do anything special. It just here to add a help text.
     """
-    widget = forms.Textarea
-    default_label = 'Comments'
-    default_helptext = '<i class="fa fa-info-circle"></i> <a href="https://github.com/adam-p/markdown-here/wiki/Markdown-Cheatsheet" target="_blank">GitHub-Flavored Markdown</a> syntax is supported'
 
     def __init__(self, *args, **kwargs):
-        required = kwargs.pop('required', False)
-        label = kwargs.pop('label', self.default_label)
-        help_text = kwargs.pop('help_text', self.default_helptext)
-        super(CommentField, self).__init__(required=required,
-                                           label=label, help_text=help_text,
-                                           *args, **kwargs)
+        super().__init__(
+            label="Comments",
+            help_text='Styling with <a href="https://github.com/adam-p/markdown-here/wiki/Markdown-Cheatsheet" target="_blank"><i class="fab fa-markdown"></i> Markdown</a> is supported',
+            *args,
+            **kwargs
+        )
 
 
-class TemplateField(forms.CharField):
+class TemplateField(TextareaField):
     """
-    A textarea dedicated for template. Exists mostly just to add a standard
-    help_text.
+    A textarea dedicated for template. Note that it does not actually do anything
+    special. It just here to add a help text.
     """
-    widget = forms.Textarea
-    default_label = 'Template'
-    default_helptext = '<i class="fa fa-info-circle"></i> <a href="https://peering-manager.readthedocs.io/en/latest/config-template/#configuration-template" target="_blank">Jinja2 template</a> syntax is supported'
 
     def __init__(self, *args, **kwargs):
-        required = kwargs.pop('required', False)
-        label = kwargs.pop('label', self.default_label)
-        help_text = kwargs.pop('help_text', self.default_helptext)
-        super(TemplateField, self).__init__(required=required,
-                                            label=label, help_text=help_text,
-                                            *args, **kwargs)
+        super().__init__(
+            label="Template",
+            help_text='<i class="fas fa-info-circle"></i> <a href="https://peering-manager.readthedocs.io/en/latest/config-template/#configuration-template" target="_blank">Jinja2 template</a> syntax is supported',
+            *args,
+            **kwargs
+        )
 
 
 class AutonomousSystemForm(BootstrapMixin, forms.ModelForm):
-    irr_as_set_peeringdb_sync = YesNoField(required=False, label='IRR AS-SET')
-    ipv6_max_prefixes_peeringdb_sync = YesNoField(required=False,
-                                                  label='IPv6 Max Prefixes')
-    ipv4_max_prefixes_peeringdb_sync = YesNoField(required=False,
-                                                  label='IPv4 Max Prefixes')
+    import_routing_policies = FilterChoiceField(
+        required=False,
+        queryset=RoutingPolicy.objects.all(),
+        widget=APISelectMultiple(
+            api_url="/api/peering/routing-policies/",
+            query_filters={"type": "import-policy"},
+        ),
+    )
+    export_routing_policies = FilterChoiceField(
+        required=False,
+        queryset=RoutingPolicy.objects.all(),
+        widget=APISelectMultiple(
+            api_url="/api/peering/routing-policies/",
+            query_filters={"type": "export-policy"},
+        ),
+    )
     comment = CommentField()
 
     class Meta:
         model = AutonomousSystem
-        fields = ('asn', 'name', 'irr_as_set', 'irr_as_set_peeringdb_sync',
-                  'ipv6_max_prefixes', 'ipv6_max_prefixes_peeringdb_sync',
-                  'ipv4_max_prefixes', 'ipv4_max_prefixes_peeringdb_sync',
-                  'comment',)
+        fields = (
+            "asn",
+            "name",
+            "contact_name",
+            "contact_phone",
+            "contact_email",
+            "irr_as_set",
+            "irr_as_set_peeringdb_sync",
+            "ipv6_max_prefixes",
+            "ipv6_max_prefixes_peeringdb_sync",
+            "ipv4_max_prefixes",
+            "ipv4_max_prefixes_peeringdb_sync",
+            "import_routing_policies",
+            "export_routing_policies",
+            "comment",
+        )
         labels = {
-            'asn': 'ASN',
-            'irr_as_set': 'IRR AS-SET',
-            'ipv6_max_prefixes': 'IPv6 Max Prefixes',
-            'ipv4_max_prefixes': 'IPv4 Max Prefixes',
-            'comment': 'Comments',
+            "asn": "ASN",
+            "irr_as_set": "IRR AS-SET",
+            "ipv6_max_prefixes": "IPv6 Max Prefixes",
+            "ipv4_max_prefixes": "IPv4 Max Prefixes",
+            "irr_as_set_peeringdb_sync": "IRR AS-SET",
+            "ipv6_max_prefixes_peeringdb_sync": "IPv6 Max Prefixes",
+            "ipv4_max_prefixes_peeringdb_sync": "IPv4 Max Prefixes",
+            "comment": "Comments",
         }
         help_texts = {
-            'asn': 'BGP autonomous system number (32-bit capable)',
-            'name': 'Full name of the AS',
+            "asn": "BGP autonomous system number (32-bit capable)",
+            "name": "Full name of the AS",
         }
-
-
-class AutonomousSystemCSVForm(forms.ModelForm):
-    class Meta:
-        model = AutonomousSystem
-
-        fields = ('asn', 'name', 'irr_as_set', 'ipv6_max_prefixes',
-                  'ipv4_max_prefixes', 'comment',)
-        labels = {
-            'asn': 'ASN',
-            'irr_as_set': 'IRR AS-SET',
-            'ipv6_max_prefixes': 'IPv6 Max Prefixes',
-            'ipv4_max_prefixes': 'IPv4 Max Prefixes',
-            'comment': 'Comments',
-        }
-        help_texts = {
-            'asn': 'BGP autonomous system number (32-bit capable)',
-            'name': 'Full name of the AS',
-        }
-
-
-class AutonomousSystemImportFromPeeringDBForm(BootstrapMixin, forms.Form):
-    model = AutonomousSystem
-    asn = forms.IntegerField(
-        label='ASN', help_text='BGP autonomous system number (32-bit capable)')
-    comment = CommentField()
 
 
 class AutonomousSystemFilterForm(BootstrapMixin, forms.Form):
     model = AutonomousSystem
-    q = forms.CharField(required=False, label='Search')
-    asn = forms.IntegerField(required=False, label='ASN')
-    name = forms.CharField(required=False, label='AS Name')
-    irr_as_set = forms.CharField(required=False, label='IRR AS-SET')
-    ipv6_max_prefixes = forms.IntegerField(
-        required=False, label='IPv6 Max Prefixes')
-    ipv4_max_prefixes = forms.IntegerField(
-        required=False, label='IPv4 Max Prefixes')
+    q = forms.CharField(required=False, label="Search")
+    asn = forms.IntegerField(required=False, label="ASN")
+    irr_as_set = forms.CharField(required=False, label="IRR AS-SET")
+    ipv6_max_prefixes = forms.IntegerField(required=False, label="IPv6 Max Prefixes")
+    ipv4_max_prefixes = forms.IntegerField(required=False, label="IPv4 Max Prefixes")
+
+
+class BGPGroupForm(BootstrapMixin, forms.ModelForm):
+    slug = SlugField(max_length=255)
+    comment = CommentField()
+    import_routing_policies = FilterChoiceField(
+        required=False,
+        queryset=RoutingPolicy.objects.all(),
+        widget=APISelectMultiple(
+            api_url="/api/peering/routing-policies/",
+            query_filters={"type": "import-policy"},
+        ),
+    )
+    export_routing_policies = FilterChoiceField(
+        required=False,
+        queryset=RoutingPolicy.objects.all(),
+        widget=APISelectMultiple(
+            api_url="/api/peering/routing-policies/",
+            query_filters={"type": "export-policy"},
+        ),
+    )
+    communities = FilterChoiceField(
+        required=False,
+        queryset=Community.objects.all(),
+        widget=APISelectMultiple(api_url="/api/peering/communities/"),
+    )
+
+    class Meta:
+        model = BGPGroup
+        fields = (
+            "name",
+            "slug",
+            "comment",
+            "import_routing_policies",
+            "export_routing_policies",
+            "communities",
+            "check_bgp_session_states",
+        )
+        labels = {
+            "check_bgp_session_states": "Poll Peering Session States",
+            "comment": "Comments",
+        }
+        help_texts = {
+            "name": "Full name of the BGP group",
+            "check_bgp_session_states": "If enabled, the state of peering sessions will be polled.",
+        }
+
+
+class BGPGroupBulkEditForm(BootstrapMixin, BulkEditForm):
+    pk = FilterChoiceField(
+        queryset=BGPGroup.objects.all(), widget=forms.MultipleHiddenInput
+    )
+    import_routing_policies = FilterChoiceField(
+        required=False,
+        queryset=RoutingPolicy.objects.all(),
+        widget=APISelectMultiple(
+            api_url="/api/peering/routing-policies/",
+            query_filters={"type": "import-policy"},
+        ),
+    )
+    export_routing_policies = FilterChoiceField(
+        required=False,
+        queryset=RoutingPolicy.objects.all(),
+        widget=APISelectMultiple(
+            api_url="/api/peering/routing-policies/",
+            query_filters={"type": "export-policy"},
+        ),
+    )
+    communities = FilterChoiceField(
+        required=False,
+        queryset=Community.objects.all(),
+        widget=APISelectMultiple(api_url="/api/peering/communities/"),
+    )
+    comment = CommentField(widget=SmallTextarea)
+
+    class Meta:
+        nullable_fields = ["comment"]
+
+
+class BGPGroupFilterForm(BootstrapMixin, forms.Form):
+    model = BGPGroup
+    q = forms.CharField(required=False, label="Search")
 
 
 class CommunityForm(BootstrapMixin, forms.ModelForm):
@@ -117,107 +222,306 @@ class CommunityForm(BootstrapMixin, forms.ModelForm):
     class Meta:
         model = Community
 
-        fields = ('name', 'value', 'type', 'comment',)
-        labels = {
-            'comment': 'Comments',
-        }
+        fields = ("name", "value", "type", "comment")
+        labels = {"comment": "Comments"}
         help_texts = {
-            'value': 'Community (RFC1997) or Large Community (RFC8092)',
-            'type': 'Ingress to tag received routes or Egress to tag advertised routes'
+            "value": "Community (RFC1997) or Large Community (RFC8092)",
+            "type": "Ingress to tag received routes or Egress to tag advertised routes",
         }
 
 
-class CommunityCSVForm(BootstrapMixin, forms.ModelForm):
-    type = CSVChoiceField(choices=COMMUNITY_TYPE_CHOICES, required=False,
-                          help_text='Ingress to tag received routes or Egress to tag advertised routes')
+class CommunityBulkEditForm(BootstrapMixin, BulkEditForm):
+    pk = FilterChoiceField(
+        queryset=Community.objects.all(), widget=forms.MultipleHiddenInput
+    )
+    type = forms.ChoiceField(
+        required=False,
+        choices=add_blank_choice(COMMUNITY_TYPE_CHOICES),
+        widget=StaticSelect,
+    )
+    comment = CommentField(widget=SmallTextarea)
 
     class Meta:
-        model = Community
-
-        fields = ('name', 'value', 'type', 'comment',)
-        labels = {
-            'comment': 'Comments',
-        }
-        help_texts = {
-            'value': 'Community (RFC1997) or Large Community (RFC8092)',
-        }
+        nullable_fields = ["comment"]
 
 
 class CommunityFilterForm(BootstrapMixin, forms.Form):
     model = Community
-    q = forms.CharField(required=False, label='Search')
-    name = forms.CharField(required=False, label='Name')
-    value = forms.CharField(required=False, label='Value')
-    type = forms.MultipleChoiceField(choices=COMMUNITY_TYPE_CHOICES,
-                                     required=False)
+    q = forms.CharField(required=False, label="Search")
+    value = forms.CharField(required=False, label="Value")
+    type = forms.MultipleChoiceField(
+        required=False, choices=COMMUNITY_TYPE_CHOICES, widget=StaticSelectMultiple
+    )
 
 
-class ConfigurationTemplateForm(BootstrapMixin, forms.ModelForm):
-    template = TemplateField()
+class DirectPeeringSessionForm(BootstrapMixin, forms.ModelForm):
+    autonomous_system = forms.ModelChoiceField(
+        queryset=AutonomousSystem.objects.all(),
+        widget=APISelect(api_url="/api/peering/autonomous-systems/"),
+    )
+    bgp_group = forms.ModelChoiceField(
+        required=False,
+        queryset=BGPGroup.objects.all(),
+        label="BGP Group",
+        widget=APISelect(api_url="/api/peering/bgp-groups/"),
+    )
+    relationship = forms.ChoiceField(
+        choices=BGP_RELATIONSHIP_CHOICES, widget=StaticSelect
+    )
+    router = forms.ModelChoiceField(
+        required=False,
+        queryset=Router.objects.all(),
+        widget=APISelect(api_url="/api/peering/routers/"),
+    )
+    import_routing_policies = FilterChoiceField(
+        required=False,
+        queryset=RoutingPolicy.objects.all(),
+        widget=APISelectMultiple(
+            api_url="/api/peering/routing-policies/",
+            query_filters={"type": "import-policy"},
+        ),
+    )
+    export_routing_policies = FilterChoiceField(
+        required=False,
+        queryset=RoutingPolicy.objects.all(),
+        widget=APISelectMultiple(
+            api_url="/api/peering/routing-policies/",
+            query_filters={"type": "export-policy"},
+        ),
+    )
+    password = PasswordField(required=False, render_value=True)
+    comment = CommentField()
+
+    def clean(self):
+        # Do the regular cleanup
+        cleaned_data = super().clean()
+
+        # This should be cleaned up, ready to be used
+        password = cleaned_data["password"]
+        router = cleaned_data["router"]
+
+        # Process to password check/encryption if we have what we need
+        if router and password:
+            # Encrypt the password only if it is not already
+            cleaned_data["password"] = router.encrypt_string(password)
+
+        return cleaned_data
 
     class Meta:
-        model = ConfigurationTemplate
-        fields = ('name', 'template', 'comment',)
+        model = DirectPeeringSession
+        fields = (
+            "local_asn",
+            "autonomous_system",
+            "bgp_group",
+            "relationship",
+            "ip_address",
+            "password",
+            "multihop_ttl",
+            "enabled",
+            "router",
+            "import_routing_policies",
+            "export_routing_policies",
+            "comment",
+        )
         labels = {
-            'comment': 'Comments',
+            "local_asn": "Local ASN",
+            "autonomous_system": "AS",
+            "ip_address": "IP Address",
+            "comment": "Comments",
+        }
+        help_texts = {
+            "local_asn": "ASN to be used locally, defaults to {}".format(
+                settings.MY_ASN
+            ),
+            "ip_address": "IPv6 or IPv4 address",
+            "enabled": "Should this session be enabled?",
+            "router": "Router on which this session is configured",
         }
 
 
-class ConfigurationTemplateFilterForm(BootstrapMixin, forms.Form):
-    model = ConfigurationTemplate
-    q = forms.CharField(required=False, label='Search')
-    name = forms.CharField(required=False, label='Name')
+class DirectPeeringSessionBulkEditForm(BootstrapMixin, BulkEditForm):
+    pk = FilterChoiceField(
+        queryset=DirectPeeringSession.objects.all(), widget=forms.MultipleHiddenInput
+    )
+    enabled = forms.NullBooleanField(
+        required=False, label="Enable", widget=CustomNullBooleanSelect
+    )
+    bgp_group = forms.ModelChoiceField(
+        required=False,
+        queryset=BGPGroup.objects.all(),
+        label="BGP Group",
+        widget=APISelect(api_url="/api/peering/bgp-groups/"),
+    )
+    import_routing_policies = FilterChoiceField(
+        required=False,
+        queryset=RoutingPolicy.objects.all(),
+        widget=APISelectMultiple(
+            api_url="/api/peering/routing-policies/",
+            query_filters={"type": "import-policy"},
+        ),
+    )
+    export_routing_policies = FilterChoiceField(
+        required=False,
+        queryset=RoutingPolicy.objects.all(),
+        widget=APISelectMultiple(
+            api_url="/api/peering/routing-policies/",
+            query_filters={"type": "export-policy"},
+        ),
+    )
+    router = forms.ModelChoiceField(
+        required=False,
+        queryset=Router.objects.all(),
+        widget=APISelect(api_url="/api/peering/routers/"),
+    )
+    comment = CommentField()
+
+    class Meta:
+        nullable_fields = ["router", "comment"]
+
+
+class DirectPeeringSessionFilterForm(BootstrapMixin, forms.Form):
+    model = DirectPeeringSession
+    q = forms.CharField(required=False, label="Search")
+    local_asn = forms.IntegerField(required=False, label="Local ASN")
+    bgp_group = FilterChoiceField(
+        queryset=BGPGroup.objects.all(),
+        to_field_name="pk",
+        null_label=True,
+        label="BGP Group",
+        widget=APISelectMultiple(api_url="/api/peering/bgp-groups/", null_option=True),
+    )
+    address_family = forms.ChoiceField(
+        required=False, choices=IP_FAMILY_CHOICES, widget=StaticSelect
+    )
+    enabled = forms.NullBooleanField(
+        required=False, label="Enabled", widget=CustomNullBooleanSelect
+    )
+    relationship = forms.MultipleChoiceField(
+        required=False, choices=BGP_RELATIONSHIP_CHOICES, widget=StaticSelectMultiple
+    )
+    router = FilterChoiceField(
+        queryset=Router.objects.all(),
+        to_field_name="pk",
+        null_label=True,
+        widget=APISelectMultiple(api_url="/api/peering/routers/", null_option=True),
+    )
 
 
 class InternetExchangeForm(BootstrapMixin, forms.ModelForm):
-    slug = SlugField()
-    check_bgp_session_states = forms.ChoiceField(
-        required=False, label='Check For Peering Session States',
-        help_text='If enabled, with a usable router, the state of peering sessions will be updated.',
-        choices=((True, 'Yes'), (False, 'No'),), widget=forms.Select())
+    slug = SlugField(max_length=255)
+    import_routing_policies = FilterChoiceField(
+        required=False,
+        queryset=RoutingPolicy.objects.all(),
+        widget=APISelectMultiple(
+            api_url="/api/peering/routing-policies/",
+            query_filters={"type": "import-policy"},
+        ),
+    )
+    export_routing_policies = FilterChoiceField(
+        required=False,
+        queryset=RoutingPolicy.objects.all(),
+        widget=APISelectMultiple(
+            api_url="/api/peering/routing-policies/",
+            query_filters={"type": "export-policy"},
+        ),
+    )
+    communities = FilterChoiceField(
+        required=False,
+        queryset=Community.objects.all(),
+        widget=APISelectMultiple(api_url="/api/peering/communities/"),
+    )
     comment = CommentField()
 
     class Meta:
         model = InternetExchange
-        fields = ('peeringdb_id', 'name', 'slug', 'ipv6_address',
-                  'ipv4_address', 'configuration_template', 'router',
-                  'check_bgp_session_states', 'comment',)
+        fields = (
+            "peeringdb_id",
+            "name",
+            "slug",
+            "ipv6_address",
+            "ipv4_address",
+            "communities",
+            "import_routing_policies",
+            "export_routing_policies",
+            "configuration_template",
+            "router",
+            "check_bgp_session_states",
+            "comment",
+        )
         labels = {
-            'peeringdb_id': 'PeeringDB ID',
-            'ipv6_address': 'IPv6 Address',
-            'ipv4_address': 'IPv4 Address',
-            'comment': 'Comments',
+            "peeringdb_id": "PeeringDB ID",
+            "ipv6_address": "IPv6 Address",
+            "ipv4_address": "IPv4 Address",
+            "check_bgp_session_states": "Poll Peering Session States",
+            "comment": "Comments",
         }
         help_texts = {
-            'peeringdb_id': 'The PeeringDB ID for the IX connection (can be left empty)',
-            'name': 'Full name of the Internet Exchange point',
-            'ipv6_address': 'IPv6 Address used to peer',
-            'ipv4_address': 'IPv4 Address used to peer',
-            'configuration_template': 'Template for configuration generation',
-            'router': 'Router connected to the Internet Exchange point',
+            "peeringdb_id": "The PeeringDB ID for the IX connection (can be left empty)",
+            "name": "Full name of the Internet Exchange point",
+            "ipv6_address": "IPv6 Address used to peer",
+            "ipv4_address": "IPv4 Address used to peer",
+            "configuration_template": "Template for configuration generation",
+            "router": "Router connected to the Internet Exchange point",
+            "check_bgp_session_states": "If enabled, with a usable router, the state of peering sessions will be polled.",
         }
+        widgets = {
+            "configuration_template": APISelect(api_url="/api/peering/templates/"),
+            "router": APISelect(api_url="/api/peering/routers/"),
+        }
+
+
+class InternetExchangeBulkEditForm(BootstrapMixin, BulkEditForm):
+    pk = FilterChoiceField(
+        queryset=InternetExchange.objects.all(), widget=forms.MultipleHiddenInput
+    )
+    import_routing_policies = FilterChoiceField(
+        required=False,
+        queryset=RoutingPolicy.objects.all(),
+        widget=APISelectMultiple(
+            api_url="/api/peering/routing-policies/",
+            query_filters={"type": "import-policy"},
+        ),
+    )
+    export_routing_policies = FilterChoiceField(
+        required=False,
+        queryset=RoutingPolicy.objects.all(),
+        widget=APISelectMultiple(
+            api_url="/api/peering/routing-policies/",
+            query_filters={"type": "export-policy"},
+        ),
+    )
+    configuration_template = forms.ModelChoiceField(
+        required=False,
+        queryset=Template.objects.all(),
+        widget=APISelect(api_url="/api/peering/templates/"),
+    )
+    router = forms.ModelChoiceField(
+        required=False,
+        queryset=Router.objects.all(),
+        widget=APISelect(api_url="/api/peering/routers/"),
+    )
+    comment = CommentField(widget=SmallTextarea)
+
+    class Meta:
+        nullable_fields = ["configuration_template", "router", "comment"]
 
 
 class InternetExchangePeeringDBForm(BootstrapMixin, forms.ModelForm):
-    slug = SlugField()
+    slug = SlugField(max_length=255)
 
     def __init__(self, *args, **kwargs):
-        kwargs.setdefault('label_suffix', '')
-        super(InternetExchangePeeringDBForm, self).__init__(*args, **kwargs)
-        self.fields['peeringdb_id'].widget = forms.HiddenInput()
+        kwargs.setdefault("label_suffix", "")
+        super().__init__(*args, **kwargs)
+        self.fields["peeringdb_id"].widget = forms.HiddenInput()
 
     class Meta:
         model = InternetExchange
-        fields = ('peeringdb_id', 'name', 'slug',
-                  'ipv6_address', 'ipv4_address',)
-        labels = {
-            'ipv6_address': 'IPv6 Address',
-            'ipv4_address': 'IPv4 Address',
-        }
+        fields = ("peeringdb_id", "name", "slug", "ipv6_address", "ipv4_address")
+        labels = {"ipv6_address": "IPv6 Address", "ipv4_address": "IPv4 Address"}
         help_texts = {
-            'name': 'Full name of the Internet Exchange point',
-            'ipv6_address': 'IPv6 Address used to peer',
-            'ipv4_address': 'IPv4 Address used to peer',
+            "name": "Full name of the Internet Exchange point",
+            "ipv6_address": "IPv6 Address used to peer",
+            "ipv4_address": "IPv4 Address used to peer",
         }
 
 
@@ -233,184 +537,340 @@ class InternetExchangePeeringDBFormSet(forms.BaseFormSet):
 
         slugs = []
         for form in self.forms:
-            slug = form.cleaned_data['slug']
+            slug = form.cleaned_data["slug"]
             if slug in slugs:
                 raise forms.ValidationError(
-                    'Internet Exchanges must have distinct slugs.')
+                    "Internet Exchanges must have distinct slugs."
+                )
             slugs.append(slug)
-
-
-class InternetExchangeCSVForm(forms.ModelForm):
-    slug = SlugField()
-
-    class Meta:
-        model = InternetExchange
-        fields = ('name', 'slug', 'ipv6_address', 'ipv4_address',
-                  'configuration_template', 'router',
-                  'check_bgp_session_states', 'comment',)
-        help_texts = {
-            'name': 'Full name of the Internet Exchange point',
-            'ipv6_address': 'IPv6 Address used to peer',
-            'ipv4_address': 'IPv4 Address used to peer',
-            'configuration_template': 'Template for configuration generation',
-            'router': 'Router connected to the Internet Exchange point',
-            'check_bgp_session_states': 'If enabled, with a usable router, the state of peering sessions will be updated.',
-        }
-
-
-class InternetExchangeCommunityForm(BootstrapMixin, forms.ModelForm):
-    class Meta:
-        model = InternetExchange
-        fields = ('communities',)
-
-    def __init__(self, *args, **kwargs):
-        if kwargs.get('instance'):
-            # Get the IX object and remove it from kwargs in order to avoid
-            # propagating when calling super
-            instance = kwargs.pop('instance')
-            # Prepare initial communities
-            initial = kwargs.setdefault('initial', {})
-            # Add primary key for each community
-            initial['communities'] = [
-                c.pk for c in instance.communities.all()]
-
-        super(InternetExchangeCommunityForm, self).__init__(*args, **kwargs)
-
-    def save(self):
-        instance = forms.ModelForm.save(self)
-        instance.communities.clear()
-
-        for community in self.cleaned_data['communities']:
-            instance.communities.add(community)
 
 
 class InternetExchangeFilterForm(BootstrapMixin, forms.Form):
     model = InternetExchange
-    q = forms.CharField(required=False, label='Search')
-    name = forms.CharField(required=False, label='IX Name')
-    ipv6_address = forms.CharField(required=False, label='IPv6 Address')
-    ipv4_address = forms.CharField(required=False, label='IPv4 Address')
+    q = forms.CharField(required=False, label="Search")
+    import_routing_policies = FilterChoiceField(
+        queryset=RoutingPolicy.objects.all(),
+        to_field_name="pk",
+        null_label=True,
+        widget=APISelectMultiple(
+            api_url="/api/peering/routing-policies/",
+            query_filters={"type": "import-policy"},
+            null_option=True,
+        ),
+    )
+    export_routing_policies = FilterChoiceField(
+        queryset=RoutingPolicy.objects.all(),
+        to_field_name="pk",
+        null_label=True,
+        widget=APISelectMultiple(
+            api_url="/api/peering/routing-policies/",
+            query_filters={"type": "export-policy"},
+            null_option=True,
+        ),
+    )
     configuration_template = FilterChoiceField(
-        queryset=ConfigurationTemplate.objects.all(), to_field_name='pk',
-        null_label='-- None --')
+        queryset=Template.objects.all(),
+        to_field_name="pk",
+        null_label=True,
+        widget=APISelectMultiple(api_url="/api/peering/templates/", null_option=True),
+    )
     router = FilterChoiceField(
-        queryset=Router.objects.all(), to_field_name='pk',
-        null_label='-- None --')
+        queryset=Router.objects.all(),
+        to_field_name="pk",
+        null_label=True,
+        widget=APISelectMultiple(api_url="/api/peering/routers/", null_option=True),
+    )
 
 
-class PeerRecordFilterForm(BootstrapMixin, forms.Form):
-    model = PeerRecord
-    q = forms.CharField(required=False, label='Search')
-    network__asn = forms.IntegerField(required=False, label='ASN')
-    network__name = forms.CharField(required=False, label='AS Name')
-    network__irr_as_set = forms.CharField(required=False, label='IRR AS-SET')
-    network__info_prefixes6 = forms.IntegerField(required=False,
-                                                 label='IPv6 Max Prefixes')
-    network__info_prefixes4 = forms.IntegerField(required=False,
-                                                 label='IPv4 Max Prefixes')
-
-
-class PeeringSessionForm(BootstrapMixin, forms.ModelForm):
-    comment = CommentField()
-    password = PasswordField(required=False, render_value=True)
-    enabled = YesNoField(required=False, label='Enabled')
+class InternetExchangePeeringSessionBulkEditForm(BootstrapMixin, BulkEditForm):
+    pk = FilterChoiceField(
+        queryset=InternetExchangePeeringSession.objects.all(),
+        widget=forms.MultipleHiddenInput,
+    )
+    is_route_server = forms.NullBooleanField(
+        required=False, label="Route Server", widget=CustomNullBooleanSelect
+    )
+    enabled = forms.NullBooleanField(
+        required=False, label="Enable", widget=CustomNullBooleanSelect
+    )
+    import_routing_policies = FilterChoiceField(
+        required=False,
+        queryset=RoutingPolicy.objects.all(),
+        widget=APISelectMultiple(
+            api_url="/api/peering/routing-policies/",
+            query_filters={"type": "import-policy"},
+        ),
+    )
+    export_routing_policies = FilterChoiceField(
+        required=False,
+        queryset=RoutingPolicy.objects.all(),
+        widget=APISelectMultiple(
+            api_url="/api/peering/routing-policies/",
+            query_filters={"type": "export-policy"},
+        ),
+    )
+    comment = CommentField(widget=SmallTextarea)
 
     class Meta:
-        model = PeeringSession
-        fields = ('autonomous_system', 'internet_exchange',
-                  'ip_address', 'password', 'enabled', 'comment',)
+        nullable_fields = ["comment"]
+
+
+class InternetExchangePeeringSessionForm(BootstrapMixin, forms.ModelForm):
+    password = PasswordField(required=False, render_value=True)
+    import_routing_policies = FilterChoiceField(
+        required=False,
+        queryset=RoutingPolicy.objects.all(),
+        widget=APISelectMultiple(
+            api_url="/api/peering/routing-policies/",
+            query_filters={"type": "import-policy"},
+        ),
+    )
+    export_routing_policies = FilterChoiceField(
+        required=False,
+        queryset=RoutingPolicy.objects.all(),
+        widget=APISelectMultiple(
+            api_url="/api/peering/routing-policies/",
+            query_filters={"type": "export-policy"},
+        ),
+    )
+    comment = CommentField()
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["autonomous_system"].widget.attrs["data-live-search"] = "true"
+
+    def clean(self):
+        # Do the regular cleanup
+        cleaned_data = super().clean()
+
+        # This should be cleaned up, ready to be used
+        password = cleaned_data["password"]
+        internet_exchange = cleaned_data["internet_exchange"]
+
+        # Process to password check/encryption if we have what we need
+        if internet_exchange.router and password:
+            # Encrypt the password only if it is not already
+            cleaned_data["password"] = internet_exchange.router.encrypt_string(password)
+
+        return cleaned_data
+
+    class Meta:
+        model = InternetExchangePeeringSession
+        fields = (
+            "autonomous_system",
+            "internet_exchange",
+            "ip_address",
+            "password",
+            "multihop_ttl",
+            "is_route_server",
+            "enabled",
+            "import_routing_policies",
+            "export_routing_policies",
+            "comment",
+        )
         labels = {
-            'autonomous_system': 'AS',
-            'internet_exchange': 'IX',
-            'ip_address': 'IP Address',
-            'enabled': 'Enabled',
-            'comment': 'Comments',
+            "autonomous_system": "AS",
+            "internet_exchange": "IX",
+            "ip_address": "IP Address",
+            "is_route_server": "Route Server",
         }
         help_texts = {
-            'ip_address': 'IPv6 or IPv4 address',
-            'enabled': 'Should this session be enabled?'
+            "ip_address": "IPv6 or IPv4 address",
+            "is_route_server": "Define if this session is with a route server",
+        }
+        widgets = {
+            "autonomous_system": APISelect(api_url="/api/peering/autonomous-systems/"),
+            "internet_exchange": APISelect(api_url="/api/peering/internet-exchanges/"),
         }
 
 
-class PeeringSessionFilterForm(BootstrapMixin, forms.Form):
-    model = PeeringSession
-    q = forms.CharField(required=False, label='Search')
-    autonomous_system__asn = forms.IntegerField(required=False, label='ASN')
-    autonomous_system__name = forms.CharField(required=False, label='AS Name')
-    internet_exchange__name = forms.CharField(required=False, label='IX Name')
-    ip_address = forms.CharField(required=False, label='IP Address')
-    ip_version = forms.IntegerField(required=False, label='IP Version',
-                                    widget=forms.Select(choices=[
-                                        (0, '---------'),
-                                        (6, 'IPv6'), (4, 'IPv4'),
-                                    ]))
-    enabled = YesNoField(required=False, label='Enabled')
-
-
-class PeeringSessionFilterFormForIX(BootstrapMixin, forms.Form):
-    model = PeeringSession
-    q = forms.CharField(required=False, label='Search')
-    autonomous_system__asn = forms.IntegerField(required=False, label='ASN')
-    autonomous_system__name = forms.CharField(required=False, label='AS Name')
-    ip_address = forms.CharField(required=False, label='IP Address')
-    ip_version = forms.IntegerField(required=False, label='IP Version',
-                                    widget=forms.Select(choices=[
-                                        (0, '---------'),
-                                        (6, 'IPv6'), (4, 'IPv4'),
-                                    ]))
-    enabled = YesNoField(required=False, label='Enabled')
-
-
-class PeeringSessionFilterFormForAS(BootstrapMixin, forms.Form):
-    model = PeeringSession
-    q = forms.CharField(required=False, label='Search')
-    ip_address = forms.CharField(required=False, label='IP Address')
-    ip_version = forms.IntegerField(required=False, label='IP Version',
-                                    widget=forms.Select(choices=[
-                                        (0, '---------'),
-                                        (6, 'IPv6'), (4, 'IPv4'),
-                                    ]))
-    enabled = YesNoField(required=False, label='Enabled')
-    internet_exchange__slug = FilterChoiceField(
-        queryset=InternetExchange.objects.all(), to_field_name='slug',
-        label='Internet Exchange')
+class InternetExchangePeeringSessionFilterForm(BootstrapMixin, forms.Form):
+    model = InternetExchangePeeringSession
+    q = forms.CharField(required=False, label="Search")
+    autonomous_system__id = FilterChoiceField(
+        queryset=AutonomousSystem.objects.all(),
+        to_field_name="pk",
+        label="Autonomous System",
+        null_label=True,
+        widget=APISelectMultiple(api_url="/api/peering/autonomous-systems/"),
+    )
+    internet_exchange__id = FilterChoiceField(
+        queryset=InternetExchange.objects.all(),
+        to_field_name="pk",
+        label="Internet Exchange",
+        null_label=True,
+        widget=APISelectMultiple(api_url="/api/peering/internet-exchanges/"),
+    )
+    address_family = forms.ChoiceField(
+        required=False, choices=IP_FAMILY_CHOICES, widget=StaticSelect
+    )
+    is_route_server = forms.NullBooleanField(
+        required=False, label="Route Server", widget=CustomNullBooleanSelect
+    )
+    enabled = forms.NullBooleanField(
+        required=False, label="Enabled", widget=CustomNullBooleanSelect
+    )
 
 
 class RouterForm(BootstrapMixin, forms.ModelForm):
+    netbox_device_id = forms.IntegerField(label="NetBox Device", initial=0)
+    platform = forms.ChoiceField(
+        required=False, choices=add_blank_choice(PLATFORM_CHOICES), widget=StaticSelect
+    )
     comment = CommentField()
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        if settings.NETBOX_API:
+            self.fields["netbox_device_id"] = forms.ChoiceField(
+                label="NetBox Device",
+                choices=[(0, "--------")]
+                + [
+                    (device.id, device.display_name)
+                    for device in NetBox().get_devices()
+                ],
+                widget=StaticSelect,
+            )
+            self.fields["netbox_device_id"].widget.attrs["class"] = " ".join(
+                [
+                    self.fields["netbox_device_id"].widget.attrs.get("class", ""),
+                    "form-control",
+                ]
+            ).strip()
+        else:
+            self.fields["netbox_device_id"].widget = forms.HiddenInput()
+
     class Meta:
         model = Router
 
-        fields = ('name', 'hostname', 'platform', 'comment',)
+        fields = (
+            "netbox_device_id",
+            "use_netbox",
+            "name",
+            "hostname",
+            "platform",
+            "encrypt_passwords",
+            "configuration_template",
+            "comment",
+        )
         labels = {
-            'comment': 'Comments',
+            "use_netbox": "Use NetBox",
+            "configuration_template": "Configuration",
+            "comment": "Comments",
         }
         help_texts = {
-            'hostname': 'Router hostname (must be resolvable) or IP address',
+            "hostname": "Router hostname (must be resolvable) or IP address",
+            "configuration_template": "Template used to generate device configuration",
+        }
+        widgets = {
+            "configuration_template": APISelect(
+                api_url="/api/peering/templates/",
+                query_filters={"type": "configuration"},
+            )
         }
 
 
-class RouterCSVForm(BootstrapMixin, forms.ModelForm):
-    platform = CSVChoiceField(choices=PLATFORM_CHOICES, required=False,
-                              help_text='The router platform, used to interact with it')
+class RouterBulkEditForm(BootstrapMixin, BulkEditForm):
+    pk = FilterChoiceField(
+        queryset=Router.objects.all(), widget=forms.MultipleHiddenInput
+    )
+    platform = forms.ChoiceField(
+        required=False, choices=add_blank_choice(PLATFORM_CHOICES), widget=StaticSelect
+    )
+    encrypt_passwords = forms.NullBooleanField(
+        required=False, label="Encrypt Passwords", widget=CustomNullBooleanSelect
+    )
+    configuration_template = forms.ModelChoiceField(
+        required=False,
+        queryset=Template.objects.all(),
+        widget=APISelect(
+            api_url="/api/peering/templates/", query_filters={"type": "configuration"}
+        ),
+    )
+    comment = CommentField(widget=SmallTextarea)
 
     class Meta:
-        model = Router
-
-        fields = ('name', 'hostname', 'platform', 'comment',)
-        labels = {
-            'comment': 'Comments',
-        }
-        help_texts = {
-            'hostname': 'Router hostname (must be resolvable) or IP address',
-        }
+        nullable_fields = ["comment"]
 
 
 class RouterFilterForm(BootstrapMixin, forms.Form):
     model = Router
-    q = forms.CharField(required=False, label='Search')
-    name = forms.CharField(required=False, label='Router Name')
-    hostname = forms.CharField(required=False, label='Router Hostname')
-    platform = forms.MultipleChoiceField(choices=PLATFORM_CHOICES,
-                                         required=False)
+    q = forms.CharField(required=False, label="Search")
+    platform = forms.MultipleChoiceField(
+        required=False, choices=PLATFORM_CHOICES, widget=StaticSelectMultiple
+    )
+    encrypt_passwords = forms.NullBooleanField(
+        required=False, label="Encrypt Passwords", widget=CustomNullBooleanSelect
+    )
+    configuration_template = FilterChoiceField(
+        queryset=Template.objects.all(),
+        to_field_name="pk",
+        null_label=True,
+        widget=APISelectMultiple(api_url="/api/peering/templates/", null_option=True),
+    )
+
+
+class RoutingPolicyForm(BootstrapMixin, forms.ModelForm):
+    slug = SlugField(max_length=255)
+    type = forms.ChoiceField(choices=ROUTING_POLICY_TYPE_CHOICES, widget=StaticSelect)
+    comment = CommentField()
+
+    class Meta:
+        model = RoutingPolicy
+
+        fields = ("name", "slug", "type", "weight", "address_family", "comment")
+        labels = {"comment": "Comments"}
+
+
+class RoutingPolicyBulkEditForm(BootstrapMixin, BulkEditForm):
+    pk = FilterChoiceField(
+        queryset=RoutingPolicy.objects.all(), widget=forms.MultipleHiddenInput
+    )
+    type = forms.ChoiceField(
+        required=False,
+        choices=add_blank_choice(ROUTING_POLICY_TYPE_CHOICES),
+        widget=StaticSelect,
+    )
+    weight = forms.IntegerField(required=False, min_value=0, max_value=32767)
+    address_family = forms.ChoiceField(required=False, choices=IP_FAMILY_CHOICES)
+    comment = CommentField(widget=SmallTextarea)
+
+    class Meta:
+        nullable_fields = ["comment"]
+
+
+class RoutingPolicyFilterForm(BootstrapMixin, forms.Form):
+    model = RoutingPolicy
+    q = forms.CharField(required=False, label="Search")
+    type = forms.MultipleChoiceField(
+        required=False,
+        choices=add_blank_choice(ROUTING_POLICY_TYPE_CHOICES),
+        widget=StaticSelectMultiple,
+    )
+    weight = forms.IntegerField(required=False, min_value=0, max_value=32767)
+    address_family = forms.ChoiceField(required=False, choices=IP_FAMILY_CHOICES)
+
+
+class TemplateForm(BootstrapMixin, forms.ModelForm):
+    type = forms.ChoiceField(
+        required=False,
+        choices=add_blank_choice(TEMPLATE_TYPE_CHOICES),
+        widget=StaticSelect,
+    )
+    template = TemplateField()
+
+    class Meta:
+        model = Template
+        fields = ("name", "type", "template", "comment")
+        labels = {"comment": "Comments"}
+
+
+class TemplateFilterForm(BootstrapMixin, forms.Form):
+    model = Template
+    q = forms.CharField(required=False, label="Search")
+    type = forms.MultipleChoiceField(
+        required=False,
+        choices=add_blank_choice(TEMPLATE_TYPE_CHOICES),
+        widget=StaticSelectMultiple,
+    )

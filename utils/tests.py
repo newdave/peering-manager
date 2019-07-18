@@ -1,8 +1,8 @@
-from __future__ import unicode_literals
-
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
+
+from .forms import add_blank_choice
 
 
 class ViewTestCase(TestCase):
@@ -12,20 +12,16 @@ class ViewTestCase(TestCase):
 
     def setUp(self):
         self.model = None
-        self.credentials = {
-            'username': 'dummy',
-            'password': 'dummy',
-        }
-        self.user = User.objects.create_user(**self.credentials)
-        self.user.is_superuser = True
-        self.user.save()
+        self.credentials = {"username": "dummy", "password": "dummy"}
+        self.user = User.objects.create_user(
+            **self.credentials, is_staff=True, is_superuser=True
+        )
 
     def authenticate_user(self):
         # Login
-        response = self.client.post(reverse('login'), self.credentials,
-                                    follow=True)
+        response = self.client.post(reverse("login"), self.credentials, follow=True)
         # Should be logged in
-        self.assertTrue(response.context['user'].is_active)
+        self.assertTrue(response.context["user"].is_active)
 
     def _check_if_object_exists(self, kwargs):
         exists = True
@@ -43,10 +39,17 @@ class ViewTestCase(TestCase):
     def does_object_not_exist(self, kwargs):
         self.assertFalse(self._check_if_object_exists(kwargs))
 
-    def get_request(self, path, params={}, expected_status_code=200,
-                    contains=None, notcontains=None):
+    def get_request(
+        self,
+        path,
+        params={},
+        data={},
+        expected_status_code=200,
+        contains=None,
+        notcontains=None,
+    ):
         # Perform the GET request
-        response = self.client.get(reverse(path, kwargs=params))
+        response = self.client.get(reverse(path, kwargs=params), data=data)
 
         # Ensure that the status code is the expected one
         self.assertEqual(expected_status_code, response.status_code)
@@ -61,8 +64,14 @@ class ViewTestCase(TestCase):
 
     def post_request(self, path, params={}, data={}, expected_status_code=200):
         # Perform the POST request
-        response = self.client.post(reverse(path, kwargs=params), data=data,
-                                    follow=True)
+        response = self.client.post(
+            reverse(path, kwargs=params), data=data, follow=True
+        )
 
         # Ensure that the status code is the expected one
         self.assertEqual(expected_status_code, response.status_code)
+
+    def test_add_blank_choice(self):
+        CHOICES = ((1, "One"), (2, "Two"))
+        CHOICES_WITH_BLANK = ((None, "---------"), (1, "One"), (2, "Two"))
+        self.assertEqual(CHOICES_WITH_BLANK, add_blank_choice(CHOICES))

@@ -4,9 +4,15 @@
             <div class="card my-2">
               <div class="card-header"><strong>Router</strong></div>
               <div class="card-body">
+                {% if settings.NETBOX_API %}
+                {% render_field form.netbox_device_id %}
+                {% render_field form.use_netbox %}
+                {% endif %}
                 {% render_field form.name %}
                 {% render_field form.hostname %}
                 {% render_field form.platform %}
+                {% render_field form.encrypt_passwords %}
+                {% render_field form.configuration_template %}
               </div>
             </div>
             <div class="card my-2">
@@ -16,3 +22,18 @@
               </div>
             </div>
 {% endblock %}
+{% if settings.NETBOX_API %}
+{% block javascript %}
+    <script>
+      // Bind function to select click
+      $("#id_netbox_device_id").change(function() {
+        if ($(this).val() == 0) {
+          $("#id_name").val("");
+        } else {
+          var device_name = $("#id_netbox_device_id option:selected").text();
+          $("#id_name").val(device_name);
+        }
+      });
+    </script>
+{% endblock %}
+{% endif %}

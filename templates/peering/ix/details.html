@@ -1,6 +1,5 @@
 {% extends 'peering/ix/_base.html' %}
 {% load helpers %}
-{% load render_table from django_tables2 %}
 {% block subcontent %}
       <div class="row">
         <div class="col-md-6">
@@ -8,43 +7,53 @@
             <div class="card-header">
               <strong>IX Details</strong>
             </div>
-            <table class="table table-hover card-body attr-table">
+            <table class="card-body table table-hover attr-table mb-0">
               <tr>
                 <td>Name</td>
                 <td>{{ internet_exchange.name }}</td>
               </tr>
               <tr>
                 <td>IPv6 Address</td>
-                {% if internet_exchange.ipv6_address %}
-                <td>{{ internet_exchange.ipv6_address }}</td>
-                {% else %}
-                <td><span class="text-muted">None</span></td>
-                {% endif %}
+                <td>
+                  {% if internet_exchange.ipv6_address %}
+                  {{ internet_exchange.ipv6_address }}
+                  {% else %}
+                  <span class="text-muted">&mdash;</span>
+                  {% endif %}
+                </td>
               </tr>
               <tr>
                 <td>IPv4 Address</td>
-                {% if internet_exchange.ipv6_address %}
-                <td>{{ internet_exchange.ipv4_address }}</td>
-                {% else %}
-                <td><span class="text-muted">None</span></td>
-                {% endif %}
+                <td>
+                  {% if internet_exchange.ipv4_address %}
+                  {{ internet_exchange.ipv4_address }}
+                  {% else %}
+                  <span class="text-muted">&mdash;</span>
+                  {% endif %}
+                </td>
               </tr>
               {% if internet_exchange.configuration_template %}
               <tr>
-                <td>Configuration Template</td>
-                <td>{{ internet_exchange.configuration_template }}</td>
+                <td>Template</td>
+                <td>{{ internet_exchange.configuration_template|as_link }}</td>
               </tr>
               {% endif %}
               {% if internet_exchange.router %}
               <tr>
-                <td>Connected Router</td>
-                <td>{{ internet_exchange.router }}</td>
+                <td>Router</td>
+                <td>{{ internet_exchange.router|as_link }}</td>
               </tr>
               {% endif %}
               {% if internet_exchange.router and internet_exchange.router.can_napalm_get_bgp_neighbors_detail %}
               <tr>
-                <td>Peering Session States</td>
-                <td>{% if internet_exchange.check_bgp_session_states %}Enabled{% else %}Disabled{% endif %}</td>
+                <td>Poll Session States</td>
+                <td>
+                  {% if internet_exchange.check_bgp_session_states %}
+                  <i class="fas fa-check text-success"></i>
+                  {% else %}
+                  <i class="fas fa-times text-danger"></i>
+                  {% endif %}
+                </td>
               </tr>
               {% endif %}
             </table>
@@ -56,7 +65,7 @@
             </div>
             <ul class="list-group list-group-flush">
               {% for prefix in internet_exchange.get_prefixes %}
-              <li class="list-group-item">{{ prefix.prefix }} <span class="badge badge-pill badge-primary float-right">{{ prefix.protocol }}</span></li>
+              <li class="list-group-item">{{ prefix }}</li>
               {% endfor %}
             </ul>
             <div class="card-footer">
@@ -67,7 +76,7 @@
           {% endif %}
         </div>
         <div class="col-md-6">
-          <div class="card">
+          <div class="card mb-2">
             <div class="card-header">
               <strong>BGP Communities</strong>
             </div>
@@ -75,7 +84,7 @@
             <ul class="list-group list-group-flush">
             {% for community in internet_exchange.communities.all %}
               <li class="list-group-item">
-                {{ community }} <span class="float-right">{{ community.get_type_html }}&nbsp;<code>{{ community.value }}</code></span>
+                {{ community|as_link }} <span class="float-right">{{ community.get_type_html }}</span>
               </li>
             {% endfor %}
             </ul>
@@ -84,12 +93,27 @@
               <span class="text-muted">None</span>
             </div>
             {% endif %}
-            {% if request.user.is_authenticated %}
-            <div class="card-footer text-right">
-              <a href="{% url 'peering:ix_update_communities' slug=internet_exchange.slug %}" class="btn btn-sm btn-warning">
-                <i class="fas fa-edit" aria-hidden="true"></i>
-                Edit communities
-              </a>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <strong>Routing Policies</strong>
+            </div>
+            {% if internet_exchange.export_routing_policies.all.count > 0 or internet_exchange.import_routing_policies.all.count > 0 %}
+            <ul class="list-group list-group-flush">
+            {% for routing_policy in internet_exchange.export_routing_policies.all %}
+              <li class="list-group-item">
+                {{ routing_policy|as_link }} <span class="float-right">{{ routing_policy.get_type_html }}</span>
+              </li>
+            {% endfor %}
+            {% for routing_policy in internet_exchange.import_routing_policies.all %}
+              <li class="list-group-item">
+                {{ routing_policy|as_link }} <span class="float-right">{{ routing_policy.get_type_html }}</span>
+              </li>
+            {% endfor %}
+            </ul>
+            {% else %}
+            <div class="card-body">
+              <span class="text-muted">None</span>
             </div>
             {% endif %}
           </div>

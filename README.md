@@ -1,7 +1,7 @@
 # Peering Manager
 
 When you start to peer a lot on different Internet exchange points, managing
-all you sessions can be time consuming.
+all your sessions can be time consuming.
 
 In order to make peering management less difficult, it needs to be organized
 and documented. This is the goal of this project.
@@ -28,27 +28,22 @@ The best way to start setting up this tool is to use **pip** within a
 [![Requirements Status](https://requires.io/github/respawner/peering-manager/requirements.svg?branch=master)](https://requires.io/github/respawner/peering-manager/requirements/?branch=master)
 [![Coverage Status](https://coveralls.io/repos/github/respawner/peering-manager/badge.svg)](https://coveralls.io/github/respawner/peering-manager)
 [![Documentation Status](https://readthedocs.org/projects/peering-manager/badge/?version=latest)](http://peering-manager.readthedocs.io/en/latest/?badge=latest)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/ambv/black)
+
 
 ## Installation
 
 Please see the [documentation](https://peering-manager.readthedocs.io/) for
 instructions on installing Peering Manager.
 
-No database setup is provided for now. This code has only been tested with an
-SQLite database.
-
 ## Helping
 
 You can help this project in many ways. Of course you can ask for features,
 give some ideas for future development, open issues if you found any and
-contribute to the code with pull requests and patches.
-
-You can also support the development of this project by
-[donating some money](https://paypal.me/GuillaumeMazoyer). Developing such
-project can be time consuming and it is done on personal time. Giving few
-dollars/euros/pounds/etc... can be a way to say thanks and help to free some
-time to develop this project.
+contribute to the code with pull requests and patches. You can also support the
+development of this project by donating some coins.
 
 ### Spreading The Word
 
-[RIPE76 Peering Manager - Easing Peering Sessions Management](https://ripe76.ripe.net/archives/video/13/) by Guillaume Mazoyer
+  * [RIPE76 Peering Manager - Easing Peering Sessions Management](https://ripe76.ripe.net/archives/video/13/) by Guillaume Mazoyer (English)
+  * [FRnOG32 Peering Automation and Documentation](https://www.dailymotion.com/video/x756n1e?playlist=x6c4hk) by Guillaume Mazoyer (French)

@@ -1,17 +1,29 @@
+sudo: required
+services:
+  - postgresql
+addons:
+  postgresql: "9.6"
+
 language: python
 python:
   - "3.5"
   - "3.6"
 matrix:
   include:
+    - python: "3.6"
+      env: TOXENV=black
     - python: "3.7"
       dist: "xenial"
       sudo: true
+before_install:
+  - git clone https://github.com/snar/bgpq3.git
+  - cd bgpq3 && ./configure && make && sudo make install
 install:
-  - pip install -r requirements.txt
-  - pip install pycodestyle coveralls
-  - cp peering_manager/configuration.example.py peering_manager/configuration.py
+  - pip install tox tox-travis coveralls
+before_script:
+  - psql --version
+  - psql -U postgres -c "SELECT version();"
 script:
-  - ./scripts/cibuild.sh
+  - tox
 after_success:
   - coveralls

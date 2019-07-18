@@ -1,25 +1,12 @@
-{% extends '_base.html' %}
+{% extends 'peering/router/_base.html' %}
 {% load helpers %}
-{% block content %}
-      <div class="float-right">
-        {% if perms.peering.change_router %}
-        <a href="{% url 'peering:router_edit' pk=router.pk %}" class="btn btn-warning">
-          <i class="fas fa-edit"></i> Edit
-        </a>
-        {% endif %}
-        {% if perms.peering.delete_router %}
-        <a href="{% url 'peering:router_delete' pk=router.pk %}" class="btn btn-danger">
-          <i class="fas fa-trash"></i> Delete
-        </a>
-        {% endif %}
-      </div>
-      <h1>{% block title %}{{ router }}{% endblock %}</h1>
+{% block subcontent %}
       <div class="alert alert-success alert-dismissible" role="alert" id="message-can-ping">
-        <button type="button" class="close" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+        <button type="button" class="close" aria-label="Close"><span>&times;</span></button>
         Successfully connected to the router.
       </div>
       <div class="alert alert-danger alert-dismissible" role="alert" id="message-cannot-ping">
-        <button type="button" class="close" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+        <button type="button" class="close" aria-label="Close"><span>&times;</span></button>
         Unable to connect to the router.
       </div>
       <div class="row">
@@ -29,14 +16,13 @@
               <strong>Router Details</strong>
               {% if router.platform %}
               <div class="float-right">
-                <button class="btn btn-sm btn-primary" id="router-ping" title="Check if the router is usable.">
-                  <i class="fa fa-plug" aria-hidden="true"></i>
-                  Ping
+                <button class="btn btn-xs btn-primary" id="router-ping" title="Check if the router is usable.">
+                  <i class="fa fa-plug"></i> Ping
                 </button>
               </div>
               {% endif %}
             </div>
-            <table class="table table-hover card-body attr-table">
+            <table class="card-body table table-hover attr-table mb-0">
               <tr>
                 <td>Name</td>
                 <td>{{ router.name }}</td>
@@ -53,9 +39,45 @@
                 <td>Other</td>
                 {% endif %}
               </tr>
+              <tr>
+                <td>Encrypt Passwords</td>
+                <td>
+                  {% if router.encrypt_passwords %}
+                  <i class="fas fa-check text-success"></i>
+                  {% else %}
+                  <i class="fas fa-times text-danger"></i>
+                  {% endif %}
+                </td>
+              </tr>
+              <tr>
+                <td>Configuration</td>
+                <td>
+                  {% if router.configuration_template %}
+                  {{ router.configuration_template|as_link }}
+                  {% else %}
+                  <span class="text-muted">&mdash;</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% if settings.NETBOX_API %}
+              <tr>
+                <td>Source</td>
+                {% if router.is_netbox_device %}
+                <td>NetBox</td>
+                {% else %}
+                <td>Local</td>
+                {% endif %}
+              </tr>
+              {% endif %}
+              <tr>
+                <td>Utilization</td>
+                <td>Connected to {% if internet_exchanges|length == 0 %}only one Internet exchange{% else %}{{ internet_exchanges|length }} Internet exchanges{% endif %}</td>
+              </tr>
             </table>
           </div>
-          <div class="card">
+        </div>
+        <div class="col-md-6">
+          <div class="card mb-2">
             <div class="card-header">
               <strong>Comments</strong>
             </div>
@@ -68,55 +90,30 @@
             </div>
           </div>
         </div>
-        <div class="col-md-6">
-          <div class="card">
-            <div class="card-header">
-              <strong>Internet Exchanges</strong>
-            </div>
-            <ul class="list-group list-group-flush">
-              {% if internet_exchanges|length > 0 %}
-              {% for ix in internet_exchanges %}
-              <li class="list-group-item"><a href="{% url 'peering:ix_details' slug=ix.slug %}">{{ ix }}</a></li>
-              {% endfor %}
-              {% else %}
-              <li class="list-group-item"><span class="text-muted">None</span></li>
-              {% endif %}
-            </ul>
-          </div>
-        </div>
       </div>
 {% endblock %}
 {% block javascript %}
     <script>
-      // Hide potential alerts
       $('.alert').hide();
-      // Do not remove alert from DOM when they are closed, just hide
-      $('.alert').on('click', '.close', function(){
+      $('.alert').on('click', '.close', function() {
         $(this).closest('.alert').slideUp();
       });
-      // Bind function to button click
+
       $("#router-ping").click(function() {
         $.ajax({
           // Call for a ping
-          type: "get",
-          url: "{% url 'peering:async_router_ping' router_id=router.id %}",
+          method: "get",
+          url: "{% url 'peering-api:router-test-napalm-connection' pk=router.pk %}",
           beforeSend: function() {
-            $('#router-ping').attr('disabled', 'disabled');
-            $('#router-ping').removeClass('btn-primary').addClass('btn-warning');
-            $('#router-ping').html('<i class="fas fa-sync fa-spin fa-fw"></i> Working');
+            $('#router-ping').attr('disabled', 'disabled').removeClass('btn-primary').addClass('btn-warning').html('<i class="fas fa-sync fa-spin fa-fw"></i> Working');
           },
           complete: function() {
-            $('#router-ping').removeClass('btn-warning').addClass('btn-primary');
-            $('#router-ping').removeAttr('disabled');
-            $('#router-ping').html('<i class="fas fa-plug" aria-hidden="true"></i> Ping');
+            $('#router-ping').removeClass('btn-warning').addClass('btn-primary').removeAttr('disabled').html('<i class="fas fa-plug"></i> Ping');
           }
-        }).done(function(response) {
-          var data = JSON.parse(response);
-          if (data['status'] == 'success') {
-            $('#message-can-ping').slideDown();
-          } else {
-            $('#message-cannot-ping').slideDown();
-          }
+        }).done(function() {
+          $('#message-can-ping').slideDown();
+        }).fail(function() {
+          $('#message-cannot-ping').slideDown();
         });
       });
     </script>

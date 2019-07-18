@@ -4,7 +4,6 @@
 # This file is part of the Peering Manager code and it will be overwritten with
 # every code releases.
 
-from __future__ import unicode_literals
 
 import os
 import socket
@@ -16,32 +15,136 @@ try:
     from peering_manager import configuration
 except ImportError:
     raise ImproperlyConfigured(
-        'Configuration file is not present. Please define peering_manager/configuration.py per the documentation.')
+        "Configuration file is not present. Please define peering_manager/configuration.py per the documentation."
+    )
 
-VERSION = '0.99-dev'
+VERSION = "0.99-dev"
+DEFAULT_LOGGING = {
+    "version": 1,
+    "formatters": {
+        "simple": {
+            "format": "%(asctime)s | %(levelname)s | %(message)s",
+            "datefmt": "%Y-%m-%d %H:%M:%S",
+        }
+    },
+    "handlers": {
+        "console": {"class": "logging.StreamHandler", "formatter": "simple"},
+        "file": {
+            "class": "logging.handlers.TimedRotatingFileHandler",
+            "filename": "logs/peering-manager.log",
+            "when": "midnight",
+            "interval": 1,
+            "backupCount": 5,
+            "formatter": "simple",
+        },
+        "peeringdb_file": {
+            "class": "logging.handlers.TimedRotatingFileHandler",
+            "filename": "logs/peeringdb.log",
+            "when": "midnight",
+            "interval": 1,
+            "backupCount": 5,
+            "formatter": "simple",
+        },
+        "napalm_file": {
+            "class": "logging.handlers.TimedRotatingFileHandler",
+            "filename": "logs/napalm.log",
+            "when": "midnight",
+            "interval": 1,
+            "backupCount": 5,
+            "formatter": "simple",
+        },
+        "netbox_file": {
+            "class": "logging.handlers.TimedRotatingFileHandler",
+            "filename": "logs/netbox.log",
+            "when": "midnight",
+            "interval": 1,
+            "backupCount": 5,
+            "formatter": "simple",
+        },
+    },
+    "loggers": {
+        "peering.manager.peering": {"handlers": ["file"], "level": "DEBUG"},
+        "peering.manager.peeringdb": {"handlers": ["peeringdb_file"], "level": "DEBUG"},
+        "peering.manager.napalm": {"handlers": ["napalm_file"], "level": "DEBUG"},
+        "peering.manager.netbox": {"handlers": ["netbox_file"], "level": "DEBUG"},
+    },
+}
 
-SECRET_KEY = getattr(configuration, 'SECRET_KEY', '')
-ALLOWED_HOSTS = getattr(configuration, 'ALLOWED_HOSTS', [])
-BASE_PATH = getattr(configuration, 'BASE_PATH', '')
+DATABASE = SECRET_KEY = ALLOWED_HOSTS = MY_ASN = None
+for setting in ["DATABASE", "SECRET_KEY", "ALLOWED_HOSTS", "MY_ASN"]:
+    try:
+        globals()[setting] = getattr(configuration, setting)
+    except AttributeError:
+        raise ImproperlyConfigured(
+            "Mandatory setting {} is not in the configuration.py file.".format(setting)
+        )
+
+CSRF_TRUSTED_ORIGINS = ALLOWED_HOSTS
+
+BASE_PATH = getattr(configuration, "BASE_PATH", "")
 if BASE_PATH:
-    BASE_PATH = BASE_PATH.strip('/') + '/'  # Enforce trailing slash only
-DEBUG = getattr(configuration, 'DEBUG', False)
-LOGIN_REQUIRED = getattr(configuration, 'LOGIN_REQUIRED', False)
-NAPALM_USERNAME = getattr(configuration, 'NAPALM_USERNAME', '')
-NAPALM_PASSWORD = getattr(configuration, 'NAPALM_PASSWORD', '')
-NAPALM_TIMEOUT = getattr(configuration, 'NAPALM_TIMEOUT', 30)
-NAPALM_ARGS = getattr(configuration, 'NAPALM_ARGS', {})
-PAGINATE_COUNT = getattr(configuration, 'PAGINATE_COUNT', 20)
-TIME_ZONE = getattr(configuration, 'TIME_ZONE', 'UTC')
-MY_ASN = getattr(configuration, 'MY_ASN', -1)
+    BASE_PATH = BASE_PATH.strip("/") + "/"  # Enforce trailing slash only
+DEBUG = getattr(configuration, "DEBUG", False)
+LOGGING = getattr(configuration, "LOGGING", DEFAULT_LOGGING)
+CHANGELOG_RETENTION = getattr(configuration, "CHANGELOG_RETENTION", 90)
+LOGIN_REQUIRED = getattr(configuration, "LOGIN_REQUIRED", False)
+NAPALM_USERNAME = getattr(configuration, "NAPALM_USERNAME", "")
+NAPALM_PASSWORD = getattr(configuration, "NAPALM_PASSWORD", "")
+NAPALM_TIMEOUT = getattr(configuration, "NAPALM_TIMEOUT", 30)
+NAPALM_ARGS = getattr(configuration, "NAPALM_ARGS", {})
+PAGINATE_COUNT = getattr(configuration, "PAGINATE_COUNT", 20)
+TIME_ZONE = getattr(configuration, "TIME_ZONE", "UTC")
+BGPQ3_PATH = getattr(configuration, "BGPQ3_PATH", "bgpq3")
+BGPQ3_HOST = getattr(configuration, "BGPQ3_HOST", "rr.ntt.net")
+BGPQ3_SOURCES = getattr(
+    configuration,
+    "BGPQ3_SOURCES",
+    "RIPE,APNIC,AFRINIC,ARIN,NTTCOM,ALTDB,BBOI,BELL,JPIRR,LEVEL3,RADB,RGNET,TC",
+)
+BGPQ3_ARGS = getattr(
+    configuration,
+    "BGPQ3_ARGS",
+    {"ipv6": ["-r", "16", "-R", "48"], "ipv4": ["-r", "8", "-R", "24"]},
+)
 
-if MY_ASN == -1:
-    raise ImproperlyConfigured(
-        'The MY_ASN setting must be set to a valid AS number.')
+# Pagination
+PER_PAGE_SELECTION = [25, 50, 100, 250, 500, 1000]
+if PAGINATE_COUNT not in PER_PAGE_SELECTION:
+    PER_PAGE_SELECTION.append(PAGINATE_COUNT)
+    PER_PAGE_SELECTION = sorted(PER_PAGE_SELECTION)
+
+
+# Django filters
+FILTERS_NULL_CHOICE_LABEL = "-- None --"
+FILTERS_NULL_CHOICE_VALUE = "null"
+
+
+# Use major.minor as API version
+REST_FRAMEWORK_VERSION = VERSION[0:3]
+REST_FRAMEWORK = {
+    "DEFAULT_VERSION": REST_FRAMEWORK_VERSION,
+    "DEFAULT_VERSIONING_CLASS": "rest_framework.versioning.AcceptHeaderVersioning",
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.SessionAuthentication",
+        "peering_manager.api.TokenAuthentication",
+    ],
+    "DEFAULT_PERMISSION_CLASSES": ["peering_manager.api.TokenPermissions"],
+    "DEFAULT_FILTER_BACKENDS": ["django_filters.rest_framework.DjangoFilterBackend"],
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.LimitOffsetPagination",
+    "PAGE_SIZE": PAGINATE_COUNT,
+}
+
+
+# NetBox API configuration
+NETBOX_API = getattr(configuration, "NETBOX_API", "")
+NETBOX_API_TOKEN = getattr(configuration, "NETBOX_API_TOKEN", "")
+NETBOX_DEVICE_ROLES = getattr(
+    configuration, "NETBOX_DEVICE_ROLES", ["router", "firewall"]
+)
 
 # PeeringDB URLs
-PEERINGDB_API = 'https://peeringdb.com/api/'
-PEERINGDB = 'https://peeringdb.com/asn/'
+PEERINGDB_API = "https://peeringdb.com/api/"
+PEERINGDB = "https://peeringdb.com/asn/"
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -49,6 +152,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 try:
     from peering_manager.ldap_config import *
+
     LDAP_CONFIGURED = True
 except ImportError:
     LDAP_CONFIGURED = False
@@ -61,174 +165,113 @@ if LDAP_CONFIGURED:
 
         # Prepend LDAPBackend to the default ModelBackend
         AUTHENTICATION_BACKENDS = [
-            'django_auth_ldap.backend.LDAPBackend',
-            'django.contrib.auth.backends.ModelBackend',
+            "django_auth_ldap.backend.LDAPBackend",
+            "django.contrib.auth.backends.ModelBackend",
         ]
     except ImportError:
         raise ImproperlyConfigured(
-            'LDAP authentication has been configured, but django-auth-ldap is not installed. You can remove peering_manager/ldap_config.py to disable LDAP.'
+            "LDAP authentication has been configured, but django-auth-ldap is not installed. You can remove peering_manager/ldap_config.py to disable LDAP."
         )
+
+
+# Force PostgreSQL to be used as database backend
+configuration.DATABASE.update({"ENGINE": "django.db.backends.postgresql"})
+# Actually set the database's settings
+DATABASES = {"default": configuration.DATABASE}
 
 
 # Application definition
 INSTALLED_APPS = [
-    'django.contrib.admin',
-    'django.contrib.auth',
-    'django.contrib.contenttypes',
-    'django.contrib.sessions',
-    'django.contrib.messages',
-    'django.contrib.staticfiles',
-    'django_filters',
-    'django_tables2',
-    'peering',
-    'peeringdb',
-    'utils',
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
+    "debug_toolbar",
+    "django_filters",
+    "django_tables2",
+    "rest_framework",
+    "netfields",
+    "peering",
+    "peeringdb",
+    "users",
+    "utils",
 ]
 
 MIDDLEWARE = [
-    'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'utils.middleware.RequireLoginMiddleware',
+    "debug_toolbar.middleware.DebugToolbarMiddleware",
+    "django.middleware.security.SecurityMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "users.middleware.LastSearchMiddleware",
+    "utils.middleware.ExceptionCatchingMiddleware",
+    "utils.middleware.ObjectChangeMiddleware",
+    "utils.middleware.RequireLoginMiddleware",
 ]
 
-ROOT_URLCONF = 'peering_manager.urls'
+ROOT_URLCONF = "peering_manager.urls"
 
 TEMPLATES = [
     {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [BASE_DIR + '/templates/'],
-        'APP_DIRS': True,
-        'OPTIONS': {
-            'context_processors': [
-                'django.template.context_processors.debug',
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
-                'utils.context_processors.settings',
-            ],
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [BASE_DIR + "/templates/"],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.debug",
+                "django.template.context_processors.request",
+                "django.template.context_processors.media",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
+                "utils.context_processors.settings",
+            ]
         },
-    },
+    }
 ]
 
-WSGI_APPLICATION = 'peering_manager.wsgi.application'
-
-
-# Database
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
-    }
-}
+WSGI_APPLICATION = "peering_manager.wsgi.application"
 
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
     {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
+        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"
     },
-    {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
-    },
+    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
+    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 
 
-# Django logging
-LOGGING = {
-    'version': 1,
-    'formatters': {
-        'simple': {
-            'format': '%(asctime)s | %(levelname)s | %(message)s',
-            'datefmt': '%Y-%m-%d %H:%M:%S',
-        },
-    },
-    'handlers': {
-        'console': {
-            'class': 'logging.StreamHandler',
-            'formatter': 'simple',
-        },
-        'file': {
-            'class': 'logging.handlers.TimedRotatingFileHandler',
-            'filename': 'logs/peering-manager.log',
-            'when': 'midnight',
-            'interval': 1,
-            'backupCount': 5,
-            'formatter': 'simple',
-        },
-        'peeringdb_file': {
-            'class': 'logging.handlers.TimedRotatingFileHandler',
-            'filename': 'logs/peeringdb.log',
-            'when': 'midnight',
-            'interval': 1,
-            'backupCount': 5,
-            'formatter': 'simple',
-        },
-        'napalm_file': {
-            'class': 'logging.handlers.TimedRotatingFileHandler',
-            'filename': 'logs/napalm.log',
-            'when': 'midnight',
-            'interval': 1,
-            'backupCount': 5,
-            'formatter': 'simple',
-        },
-    },
-    'loggers': {
-        'peering.manager.peering': {
-            'handlers': ['file'],
-            'level': 'DEBUG',
-        },
-        'peering.manager.peeringdb': {
-            'handlers': ['peeringdb_file'],
-            'level': 'DEBUG',
-        },
-        'peering.manager.napalm': {
-            'handlers': ['napalm_file'],
-            'level': 'DEBUG',
-        },
-    }
-}
-
-
 # Internationalization
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = "en-us"
 USE_I18N = True
 USE_L10N = True
 USE_TZ = True
 
 
 # Authentication URL
-LOGIN_URL = '/{}login/'.format(BASE_PATH)
+LOGIN_URL = "/{}login/".format(BASE_PATH)
 
 
 # Messages
-MESSAGE_TAGS = {
-    messages.ERROR: 'danger',
-}
+MESSAGE_TAGS = {messages.ERROR: "danger"}
 
 
 # Static files (CSS, JavaScript, Images)
-STATIC_ROOT = BASE_DIR + '/static/'
-STATIC_URL = '/{}static/'.format(BASE_PATH)
-STATICFILES_DIRS = (
-    os.path.join(BASE_DIR, 'project-static'),
-)
+STATIC_ROOT = BASE_DIR + "/static/"
+STATIC_URL = "/{}static/".format(BASE_PATH)
+STATICFILES_DIRS = (os.path.join(BASE_DIR, "project-static"),)
 
-# Django filters
-FILTERS_NULL_CHOICE_LABEL = 'None'
-FILTERS_NULL_CHOICE_VALUE = '0'
+# Django debug toolbar
+INTERNAL_IPS = ["127.0.0.1", "::1"]
 
 try:
     HOSTNAME = socket.gethostname()
 except Exception:
-    HOSTNAME = 'localhost'
+    HOSTNAME = "localhost"

@@ -11,6 +11,14 @@
               </div>
             </div>
             <div class="card my-2">
+              <div class="card-header"><strong>Routing Policies and Communities</strong></div>
+              <div class="card-body">
+                {% render_field form.import_routing_policies %}
+                {% render_field form.export_routing_policies %}
+                {% render_field form.communities %}
+              </div>
+            </div>
+            <div class="card my-2">
               <div class="card-header"><strong>Deployment</strong></div>
               <div class="card-body">
                 {% render_field form.configuration_template %}
@@ -21,7 +29,7 @@
             <div class="card my-2">
               <div class="card-header">
                 <strong>PeeringDB</strong>
-                <a href="http://peering-manager.readthedocs.io/en/latest/man/" target="_blank" class="float-right btn btn-sm btn-info">
+                <a href="http://peering-manager.readthedocs.io/en/latest/man/" target="_blank" class="float-right btn btn-xs btn-info">
                   <i class="fas fa-question-circle"></i> Getting the PeeringDB ID
                 </a>
               </div>

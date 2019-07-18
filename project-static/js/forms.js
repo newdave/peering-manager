@@ -1,4 +1,70 @@
 $(document).ready(function() {
+  // Select2
+  $.fn.select2.defaults.set('theme', 'bootstrap');
+  $('.custom-select2-static').select2({
+    placeholder: '---------',
+    allowClear: true
+  });
+  $('.custom-select2-api').select2({
+    placeholder: '---------',
+    allowClear: true,
+    ajax: {
+      delay: 500,
+      url: function() {
+        return this[0].getAttribute('data-url')
+      },
+      data: function(params) {
+        var element = this[0];
+        var parameters = {
+            q: params.term,
+            brief: 1,
+            limit: 50,
+            offset: (params.page - 1) * 50 || 0,
+        };
+
+        $.each(element.attributes, function(index, attr) {
+          if (attr.name.includes('data-query-filter-')) {
+            var parameter_name = attr.name.split('data-query-filter-')[1]
+            parameters[parameter_name] = attr.value;
+          }
+        });
+
+        return $.param(parameters, true);
+      },
+      processResults: function(data) {
+        var element = this.$element[0];
+        var results = $.map(data.results, function(object) {
+          object.text = object[element.getAttribute('display-field')] || object.name;
+          object.id = object[element.getAttribute('value-field')] || object.id;
+          return object;
+        });
+
+        // Add null option one time
+        if (element.getAttribute('data-null-option') && (data.previous === null)) {
+          var null_option = $(element).children()[0]
+          results.unshift({
+            id: null_option.value,
+            text: null_option.text
+          });
+        }
+
+        // Check if the result is paginated
+        var page = data.next !== null;
+        return {
+          results: results,
+          pagination: {
+            more: page
+          }
+        };
+      },
+    },
+  });
+
+  // Pagination
+  $('select#id_per_page').change(function() {
+    this.form.submit();
+  });
+
   function generateSlug(value) {
     value = value.replace(/[^\-\.\w\s]/g, '');        // Remove unneeded chars
     value = value.replace(/^[\s\.]+|[\s\.]+$/g, '');  // Trim leading/trailing spaces
@@ -23,13 +89,14 @@ $(document).ready(function() {
   }
 
   // Show/Hide password in a password input field
-  $('#id_password_reveal').click(function() {
-    input_type = $('#id_password').attr('type');
-    if (input_type == 'password') {
-      $('#id_password').attr('type', 'text');
+  $('button[id$="_reveal"]').click(function() {
+    var passwordInputID = '#' + this.id.replace('_reveal', '');
+    inputType = $(passwordInputID).attr('type');
+    if (inputType == 'password') {
+      $(passwordInputID).attr('type', 'text');
       $(this).html('<i class="fas fa-eye-slash"></i> Hide');
     } else {
-      $('#id_password').attr('type', 'password');
+      $(passwordInputID).attr('type', 'password');
       $(this).html('<i class="fas fa-eye"></i> Show');
     }
   });
@@ -60,5 +127,16 @@ $(document).ready(function() {
     } else {
       $('#select_all_box').find('button').prop('disabled', 'disabled');
     }
+  });
+
+  // Disable field when clicking on the "Set null" checkbox
+  $('input:checkbox[name=_nullify]').click(function() {
+      var elementToHide = $('#id_' + this.value);
+      if (elementToHide.is('select')) {
+        elementToHide.toggle('disabled');
+        elementToHide.next().toggle('disabled');
+      } else {
+        elementToHide.toggle('disabled');
+      }
   });
 });
